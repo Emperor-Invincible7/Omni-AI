@@ -14,10 +14,12 @@ import ChartRenderer from './ChartRenderer';
  *   - json:chart fenced blocks → ChartRenderer
  *   - Plain paragraphs
  *
- * Deliberately avoids a heavy dependency. Pure string → React tree.
+ * Exposes `extractChartSpec(content)` so the Workspace can mirror the
+ * latest chart into the right-pane Preview tab without re-rendering
+ * the markdown tree.
  */
 
-interface Block {
+export interface Block {
   kind: 'p' | 'h' | 'ul' | 'ol' | 'code' | 'table' | 'chart';
   level?: number;
   text?: string;
@@ -26,7 +28,7 @@ interface Block {
   chart?: ChartSpec;
 }
 
-interface ChartSpec {
+export interface ChartSpec {
   type: 'line' | 'bar' | 'area';
   xKey: string;
   data: Array<Record<string, number | string>>;
@@ -34,21 +36,28 @@ interface ChartSpec {
   height?: number;
 }
 
-export default function MarkdownView({ content }: { content: string }) {
+export default function MarkdownView({ content, isStreaming = false }: { content: string; isStreaming?: boolean }) {
   const blocks = useMemo(() => parseMarkdown(content), [content]);
 
   return (
-    <div className="omni-md text-[14px] leading-relaxed text-[#EDEDED] space-y-3">
-      {blocks.map((b, i) => renderBlock(b, i))}
+    <div
+      className="omni-md text-[14px] leading-relaxed space-y-3"
+      style={{ color: 'var(--text)' }}
+    >
+      {blocks.map((b, i) => renderBlock(b, i, isStreaming))}
     </div>
   );
 }
 
-function renderBlock(b: Block, i: number) {
+function renderBlock(b: Block, i: number, isStreaming: boolean) {
   switch (b.kind) {
     case 'h':
       return (
-        <h3 key={i} className={`font-bold tracking-tight text-white ${headingCls(b.level ?? 3)}`}>
+        <h3
+          key={i}
+          className={`font-bold tracking-tight ${headingCls(b.level ?? 3)}`}
+          style={{ color: 'var(--text)' }}
+        >
           {renderInline(b.text ?? '')}
         </h3>
       );
@@ -63,7 +72,7 @@ function renderBlock(b: Block, i: number) {
         <ul key={i} className="list-none space-y-1.5 pl-0">
           {b.text!.split('\n').map((line, j) => (
             <li key={j} className="flex gap-2">
-              <span className="text-white font-mono text-[12px] mt-0.5">▸</span>
+              <span className="font-mono text-[12px] mt-0.5" style={{ color: 'var(--text)' }}>▸</span>
               <span>{renderInline(line.replace(/^[-*]\s*/, ''))}</span>
             </li>
           ))}
@@ -74,7 +83,7 @@ function renderBlock(b: Block, i: number) {
         <ol key={i} className="list-none space-y-1.5 pl-0 counter-reset-[item]">
           {b.text!.split('\n').map((line, j) => (
             <li key={j} className="flex gap-2">
-              <span className="text-white font-mono text-[12px] mt-0.5 tabular-nums">
+              <span className="font-mono text-[12px] mt-0.5 tabular-nums" style={{ color: 'var(--text)' }}>
                 {String(j + 1).padStart(2, '0')}.
               </span>
               <span>{renderInline(line.replace(/^\d+\.\s*/, ''))}</span>
@@ -86,10 +95,21 @@ function renderBlock(b: Block, i: number) {
       return (
         <pre
           key={i}
-          className="border border-white/20 bg-black p-3 font-mono text-[12px] overflow-x-auto text-[#EDEDED]"
+          className="border p-3 font-mono text-[12px] overflow-x-auto"
+          style={{
+            borderColor: 'var(--border)',
+            background: 'var(--bg-elev-1)',
+            color: 'var(--text)',
+          }}
         >
-          <div className="flex items-center justify-between mb-2 pb-2 border-b border-white/20">
-            <span className="font-mono text-[9px] tracking-[0.2em] uppercase text-[#A3A3A3]">
+          <div
+            className="flex items-center justify-between mb-2 pb-2 border-b"
+            style={{ borderColor: 'var(--border)' }}
+          >
+            <span
+              className="font-mono text-[9px] tracking-[0.2em] uppercase"
+              style={{ color: 'var(--text-dim)' }}
+            >
               {b.lang || 'code'}
             </span>
           </div>
@@ -99,10 +119,31 @@ function renderBlock(b: Block, i: number) {
     case 'table':
       return <TableBlock key={i} rows={b.rows ?? []} />;
     case 'chart':
-      return <ChartRenderer key={i} spec={b.chart!} />;
+      return <ChartRenderer key={i} spec={b.chart!} isStreaming={isStreaming} />;
     default:
       return null;
   }
+}
+
+function ChartStreamingPlaceholder() {
+  return (
+    <div
+      className="border p-4 my-3 font-mono text-[11px] tracking-[0.14em] uppercase"
+      style={{
+        borderColor: 'var(--border)',
+        background: 'var(--bg-elev-1)',
+        color: 'var(--text-dim)',
+      }}
+    >
+      <div className="flex items-center gap-2">
+        <span
+          className="w-2 h-2"
+          style={{ background: 'var(--accent)', animation: 'pulse 1.2s infinite' }}
+        />
+        PROCESSING_DATASET · CHART_PENDING
+      </div>
+    </div>
+  );
 }
 
 function headingCls(level: number) {
@@ -110,12 +151,11 @@ function headingCls(level: number) {
     case 1: return 'text-2xl mt-4 mb-2';
     case 2: return 'text-xl mt-3 mb-2';
     case 3: return 'text-base mt-2 mb-1';
-    default: return 'text-sm font-semibold text-[#EDEDED] mt-2 mb-1';
+    default: return 'text-sm font-semibold mt-2 mb-1';
   }
 }
 
 function renderInline(text: string) {
-  // Inline code `x`, **bold**, *italic*
   const parts: Array<{ kind: 'text' | 'code' | 'b' | 'i'; value: string }> = [];
   let remaining = text;
   const re = /(`[^`]+`|\*\*[^*]+\*\*|\*[^*]+\*)/g;
@@ -133,13 +173,21 @@ function renderInline(text: string) {
   return parts.map((p, i) => {
     if (p.kind === 'code') {
       return (
-        <code key={i} className="font-mono text-[12.5px] bg-black border border-white/20 px-1.5 py-0.5">
+        <code
+          key={i}
+          className="font-mono text-[12.5px] border px-1.5 py-0.5"
+          style={{
+            background: 'var(--code-bg, var(--bg-elev-1))',
+            borderColor: 'var(--border)',
+            color: 'var(--text)',
+          }}
+        >
           {p.value}
         </code>
       );
     }
-    if (p.kind === 'b') return <strong key={i} className="text-white font-semibold">{p.value}</strong>;
-    if (p.kind === 'i') return <em key={i} className="text-[#D4D4D4]">{p.value}</em>;
+    if (p.kind === 'b') return <strong key={i} className="font-semibold" style={{ color: 'var(--text)' }}>{p.value}</strong>;
+    if (p.kind === 'i') return <em key={i} style={{ color: 'var(--text-dim)' }}>{p.value}</em>;
     return <span key={i}>{p.value}</span>;
   });
 }
@@ -148,12 +196,20 @@ function TableBlock({ rows }: { rows: string[][] }) {
   if (rows.length === 0) return null;
   const [header, ...body] = rows;
   return (
-    <div className="border border-white/20 overflow-x-auto">
-      <table className="omni-table w-full text-[13px]">
+    <div className="border overflow-x-auto" style={{ borderColor: 'var(--border)' }}>
+      <table className="omni-table w-full text-[13px]" style={{ color: 'var(--text)' }}>
         <thead>
           <tr>
             {header.map((c, i) => (
-              <th key={i} className="font-mono text-[10px] tracking-[0.14em] uppercase text-[#A3A3A3] text-left px-3 py-2 border-b border-white/20">
+              <th
+                key={i}
+                className="font-mono text-[10px] tracking-[0.14em] uppercase text-left px-3 py-2 border-b"
+                style={{
+                  background: 'var(--bg-elev-1)',
+                  color: 'var(--text-dim)',
+                  borderColor: 'var(--border)',
+                }}
+              >
                 {renderInline(c.trim())}
               </th>
             ))}
@@ -161,9 +217,16 @@ function TableBlock({ rows }: { rows: string[][] }) {
         </thead>
         <tbody>
           {body.map((r, i) => (
-            <tr key={i} className="hover:bg-[#0A0A0A] transition-colors">
+            <tr key={i} className="transition-colors">
               {r.map((c, j) => (
-                <td key={j} className="px-3 py-2 border-b border-white/20 font-mono text-[12px] tabular-nums">
+                <td
+                  key={j}
+                  className="px-3 py-2 border-b font-mono text-[12px] tabular-nums"
+                  style={{
+                    borderColor: 'var(--border)',
+                    color: 'var(--text)',
+                  }}
+                >
                   {renderInline(c.trim())}
                 </td>
               ))}
@@ -177,14 +240,13 @@ function TableBlock({ rows }: { rows: string[][] }) {
 
 /* ---------- Parser ---------- */
 
-function parseMarkdown(src: string): Block[] {
+export function parseMarkdown(src: string): Block[] {
   const lines = src.replace(/\r\n/g, '\n').split('\n');
   const out: Block[] = [];
   let i = 0;
   while (i < lines.length) {
     const line = lines[i];
 
-    // Fenced code (```lang … ```) or chart fence (```json:chart … ```)
     const fence = line.match(/^```([\w-]+)?\s*$/);
     if (fence) {
       const lang = fence[1] ?? '';
@@ -194,7 +256,7 @@ function parseMarkdown(src: string): Block[] {
         buf.push(lines[i]);
         i++;
       }
-      i++; // skip closing fence
+      i++;
       if (lang === 'json:chart') {
         const spec = safeParseChart(buf.join('\n'));
         if (spec) out.push({ kind: 'chart', chart: spec });
@@ -205,7 +267,6 @@ function parseMarkdown(src: string): Block[] {
       continue;
     }
 
-    // Markdown table ─ at least header line + separator line
     if (line.includes('|') && i + 1 < lines.length && /^\s*\|?\s*[-:]+\s*(\|\s*[-:]+\s*)+\|?\s*$/.test(lines[i + 1])) {
       const rows: string[][] = [];
       rows.push(splitRow(line));
@@ -218,7 +279,6 @@ function parseMarkdown(src: string): Block[] {
       continue;
     }
 
-    // Heading
     const h = line.match(/^(#{1,6})\s+(.*)$/);
     if (h) {
       out.push({ kind: 'h', level: h[1].length, text: h[2] });
@@ -226,7 +286,6 @@ function parseMarkdown(src: string): Block[] {
       continue;
     }
 
-    // Unordered list
     if (/^[-*]\s+/.test(line)) {
       const buf: string[] = [];
       while (i < lines.length && (/^[-*]\s+/.test(lines[i]) || lines[i] === '')) {
@@ -237,7 +296,6 @@ function parseMarkdown(src: string): Block[] {
       continue;
     }
 
-    // Ordered list
     if (/^\d+\.\s+/.test(line)) {
       const buf: string[] = [];
       while (i < lines.length && (/^\d+\.\s+/.test(lines[i]) || lines[i] === '')) {
@@ -248,13 +306,11 @@ function parseMarkdown(src: string): Block[] {
       continue;
     }
 
-    // Blank line → skip
     if (line.trim() === '') {
       i++;
       continue;
     }
 
-    // Paragraph (collect until blank line / fence / table)
     const buf: string[] = [];
     while (
       i < lines.length &&
@@ -294,4 +350,14 @@ function safeParseChart(src: string): ChartSpec | null {
   } catch {
     return null;
   }
+}
+
+/** Pull the FIRST valid chart spec out of an AI message. Used by the
+ * Workspace right pane to mirror the chart into the Preview tab. */
+export function extractChartSpec(content: string): ChartSpec | null {
+  const blocks = parseMarkdown(content);
+  for (const b of blocks) {
+    if (b.kind === 'chart' && b.chart) return b.chart;
+  }
+  return null;
 }

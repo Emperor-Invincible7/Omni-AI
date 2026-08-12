@@ -4,24 +4,71 @@
 
 /* ============================================================
    OMNI-AI · NOTHING OS DESIGN SYSTEM
-   - Strict monochrome: pure black, pure white, monospaced accents
+   Dual theme: dark (default) and light. Monochrome + accent.
+   - Strict monochrome in dark mode
+   - Pure white / light gray + Nothing Orange (#FF4500) in light mode
    - 0px radii. 1px sharp borders. Grid-based layout.
-   - No gradients, no soft shadows, no glassmorphism.
    ============================================================ */
 
-:root {
+:root,
+[data-theme='dark'] {
   --bg: #000000;
   --bg-elev-1: #0A0A0A;
   --bg-elev-2: #141414;
+  --bg-elev-3: #1F1F1F;
+  --bg-overlay: rgba(0, 0, 0, 0.85);
   --border: #2A2A2A;
   --border-strong: #FFFFFF;
   --border-faint: #1F1F1F;
+  --border-soft: rgba(255, 255, 255, 0.15);
   --text: #FFFFFF;
   --text-dim: #A3A3A3;
   --text-mute: #525252;
+  --accent: #FFFFFF;
   --accent-on: #FFFFFF;
   --accent-off: #525252;
+  --accent-contrast: #000000;
   --signal: #FFFFFF;
+  --hover-bg: #0A0A0A;
+  --active-bg: #FFFFFF;
+  --active-fg: #000000;
+  --scrollbar-track: #000000;
+  --scrollbar-thumb: #2A2A2A;
+  --chart-series: ['#FFFFFF', '#D4D4D4', '#A3A3A3', '#737373'];
+  --chart-grid: #1F1F1F;
+  --code-bg: #000000;
+  --table-row-hover: #0A0A0A;
+  --shadow: none;
+}
+
+[data-theme='light'] {
+  --bg: #FFFFFF;
+  --bg-elev-1: #F4F4F5;
+  --bg-elev-2: #E4E4E7;
+  --bg-elev-3: #D4D4D8;
+  --bg-overlay: rgba(0, 0, 0, 0.4);
+  --border: #D4D4D8;
+  --border-strong: #000000;
+  --border-faint: #E4E4E7;
+  --border-soft: rgba(0, 0, 0, 0.15);
+  --text: #000000;
+  --text-dim: #52525B;
+  --text-mute: #A1A1AA;
+  --accent: #FF4500;
+  --accent-on: #FF4500;
+  --accent-off: #A1A1AA;
+  --accent-contrast: #FFFFFF;
+  --signal: #FF4500;
+  --hover-bg: #F4F4F5;
+  --active-bg: #000000;
+  --active-fg: #FFFFFF;
+  --scrollbar-track: #F4F4F5;
+  --scrollbar-thumb: #D4D4D8;
+  --chart-series: ['#FF4500', '#000000', '#52525B', '#A1A1AA'];
+  --chart-grid: #E4E4E7;
+  --code-bg: #F4F4F5;
+  --table-row-hover: #F4F4F5;
+  --shadow: none;
 }
 
 * { box-sizing: border-box; }
@@ -34,12 +81,10 @@ html, body {
   -moz-osx-font-smoothing: grayscale;
   letter-spacing: -0.005em;
   overflow: hidden;
+  transition: background-color 200ms linear, color 200ms linear;
 }
 
-body {
-  /* Flat monochrome — no radial gradients, no aurora. */
-  background: #000000;
-}
+body { background: var(--bg); }
 
 /* Reusable dot-matrix typography helpers. */
 .font-mono-tight { font-family: 'JetBrains Mono', ui-monospace, monospace; letter-spacing: 0; }
@@ -47,12 +92,11 @@ body {
 
 /* Custom scrollbar — square, monospace friendly. */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: #000000; border-left: 1px solid #1F1F1F; }
-::-webkit-scrollbar-thumb { background: #2A2A2A; border-radius: 0; }
-::-webkit-scrollbar-thumb:hover { background: #FFFFFF; }
+::-webkit-scrollbar-track { background: var(--scrollbar-track); border-left: 1px solid var(--border-faint); }
+::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 0; }
+::-webkit-scrollbar-thumb:hover { background: var(--text); }
 
 @layer components {
-  /* Sharp cell border. Use border-cell on any grid compartment. */
   .cell {
     border: 1px solid var(--border);
     background: var(--bg-elev-1);
@@ -65,7 +109,6 @@ body {
     border-color: var(--border-strong);
   }
 
-  /* Small, dense button used everywhere. */
   .nx-btn {
     display: inline-flex;
     align-items: center;
@@ -81,7 +124,7 @@ body {
     letter-spacing: 0.04em;
     text-transform: uppercase;
     border-radius: 0;
-    transition: border-color 100ms linear, background-color 100ms linear;
+    transition: border-color 100ms linear, background-color 100ms linear, color 100ms linear;
   }
   .nx-btn:hover {
     border-color: var(--border-strong);
@@ -108,18 +151,30 @@ body {
   .nx-icon-btn:hover {
     color: var(--text);
     border-color: var(--border-strong);
+    background: var(--hover-bg);
   }
   .nx-icon-btn:disabled {
     color: var(--text-mute);
     cursor: not-allowed;
   }
 
+  /* Primary action button (high contrast, accent fill). */
+  .nx-btn-primary {
+    background: var(--active-bg);
+    color: var(--active-fg);
+    border-color: var(--border-strong);
+  }
+  .nx-btn-primary:hover {
+    background: var(--accent);
+    color: var(--accent-contrast);
+    border-color: var(--accent);
+  }
+
   /* Dot-matrix visual primitives. */
   .dot { display: inline-block; width: 6px; height: 6px; background: currentColor; border-radius: 0; }
-  .dot-active { background: #FFFFFF; }
-  .dot-idle { background: #525252; }
+  .dot-active { background: var(--accent); }
+  .dot-idle { background: var(--text-mute); }
 
-  /* 4x4 pixel grid used in loading and active states. */
   .dot-matrix {
     display: grid;
     grid-template-columns: repeat(4, 4px);
@@ -127,17 +182,15 @@ body {
     gap: 2px;
   }
   .dot-matrix > span {
-    background: #2A2A2A;
+    background: var(--bg-elev-3);
     width: 4px; height: 4px;
   }
-  .dot-matrix > span.on { background: #FFFFFF; }
+  .dot-matrix > span.on { background: var(--text); }
   .dot-matrix > span.blink { animation: matrixBlink 1.2s steps(2,end) infinite; }
 
-  /* Status bar separator — 1px tall, no glow. */
   .rule { height: 1px; background: var(--border); }
   .rule-strong { height: 1px; background: var(--border-strong); }
 
-  /* Mono tag used for all status/metric badges. */
   .tag {
     display: inline-flex;
     align-items: center;
@@ -153,19 +206,20 @@ body {
   }
   .tag-on { color: var(--text); border-color: var(--border-strong); }
 
-  /* Input shell — 1px, no rounding, no shadow. */
   .input-shell {
     display: flex;
-    align-items: center;
+    align-items: end;
     gap: 8px;
-    height: 44px;
-    padding: 0 12px;
-    border: 1px solid var(--border-strong);
-    background: #000000;
+    min-height: 56px;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    background: var(--bg);
     border-radius: 0;
     transition: border-color 100ms linear;
   }
-  .input-shell:focus-within { border-color: var(--border-strong); }
+  .input-shell:focus-within {
+    border-color: var(--border-strong);
+  }
 
   .input-shell input,
   .input-shell textarea {
@@ -176,30 +230,11 @@ body {
     color: var(--text);
     font-family: 'Inter', system-ui, sans-serif;
     font-size: 14px;
-    line-height: 1.4;
+    line-height: 1.5;
     resize: none;
   }
   .input-shell input::placeholder,
   .input-shell textarea::placeholder { color: var(--text-mute); }
-
-  /* Dock button used for bottom navigation. */
-  .dock-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    height: 32px;
-    padding: 0 12px;
-    border: 1px solid transparent;
-    background: transparent;
-    color: var(--text-dim);
-    font-family: 'JetBrains Mono', ui-monospace, monospace;
-    font-size: 11px;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    transition: color 100ms linear, border-color 100ms linear, background-color 100ms linear;
-  }
-  .dock-btn:hover { color: var(--text); border-color: var(--border-strong); }
-  .dock-btn.active { color: var(--text); border-color: var(--border-strong); background: #0A0A0A; }
 }
 
 /* ---------- OMNI markdown / table styling ---------- */
@@ -208,16 +243,16 @@ body {
   .omni-md code {
     font-family: 'JetBrains Mono', ui-monospace, monospace;
     font-size: 12.5px;
-    background: #000;
-    border: 1px solid rgba(255, 255, 255, 0.2);
+    background: var(--code-bg);
+    border: 1px solid var(--border);
     padding: 1px 6px;
-    color: #fff;
+    color: var(--text);
   }
   .omni-md pre code {
     border: 0;
     padding: 0;
     background: transparent;
-    color: #EDEDED;
+    color: var(--text);
   }
   .omni-table {
     border-collapse: collapse;
@@ -225,13 +260,19 @@ body {
   }
   .omni-table th,
   .omni-table td {
-    border: 1px solid rgba(255, 255, 255, 0.2);
+    border: 1px solid var(--border);
   }
   .omni-table thead th {
-    background: #0A0A0A;
-    color: #A3A3A3;
+    background: var(--bg-elev-1);
+    color: var(--text-dim);
   }
   .omni-table tbody tr:hover {
-    background: #0A0A0A;
+    background: var(--table-row-hover);
   }
 }
+
+/* Animate spinner */
+@keyframes nx-spin {
+  to { transform: rotate(360deg); }
+}
+.nx-spin { animation: nx-spin 0.9s linear infinite; }

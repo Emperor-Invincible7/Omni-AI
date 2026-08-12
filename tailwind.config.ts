@@ -2,6 +2,7 @@ import type { Config } from 'tailwindcss';
 
 const config: Config = {
   content: ['./src/**/*.{js,ts,jsx,tsx,mdx}'],
+  darkMode: ['class', '[data-theme="dark"]'],
   theme: {
     extend: {
       fontFamily: {
@@ -10,7 +11,6 @@ const config: Config = {
         display: ['"JetBrains Mono"', '"IBM Plex Mono"', 'ui-monospace', 'monospace'],
       },
       colors: {
-        // Omni-AI · Nothing OS monochrome palette
         ink: {
           DEFAULT: '#000000',
           900: '#0A0A0A',
@@ -27,6 +27,13 @@ const config: Config = {
           600: '#737373',
           500: '#525252',
           400: '#404040',
+        },
+        // Nothing OS accent — vibrant orange used in light mode.
+        nothing: {
+          DEFAULT: '#FF4500',
+          500: '#FF4500',
+          600: '#E63E00',
+          400: '#FF6A2F',
         },
       },
       borderRadius: {

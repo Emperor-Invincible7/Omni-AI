@@ -1,0 +1,54 @@
+import React from 'react';
+import { render, screen } from '@testing-library/react';
+import { describe, it, expect, vi } from 'vitest';
+import '@testing-library/jest-dom';
+import ChartRenderer from './ChartRenderer';
+
+// Mock Recharts ResponsiveContainer for JSDOM
+vi.mock('recharts', async () => {
+  const original = await vi.importActual('recharts');
+  return {
+    ...original,
+    ResponsiveContainer: ({ children }: { children: React.ReactNode }) => (
+      <div data-testid="responsive-container">{children}</div>
+    ),
+  };
+});
+
+describe('ChartRenderer Component', () => {
+  it('renders Loading... fallback when isStreaming is true', () => {
+    render(<ChartRenderer isStreaming={true} />);
+    expect(screen.getByText(/Loading\.\.\./i)).toBeInTheDocument();
+  });
+
+  it('renders Loading... fallback when streaming prop is true', () => {
+    render(<ChartRenderer streaming={true} />);
+    expect(screen.getByText(/Loading\.\.\./i)).toBeInTheDocument();
+  });
+
+  it('parses raw JSON with markdown ticks and renders chart when isStreaming is false', () => {
+    const rawJsonWithTicks = `\`\`\`json
+{
+  "type": "bar",
+  "xKey": "month",
+  "data": [
+    { "month": "Jan", "sales": 100 },
+    { "month": "Feb", "sales": 150 }
+  ],
+  "series": [
+    { "key": "sales", "label": "Sales" }
+  ]
+}
+\`\`\``;
+
+    render(<ChartRenderer rawJson={rawJsonWithTicks} isStreaming={false} />);
+    expect(screen.getByTestId('responsive-container')).toBeInTheDocument();
+    expect(screen.getByText(/CHART :: BAR/i)).toBeInTheDocument();
+  });
+
+  it('renders Invalid Data Format when JSON parsing fails', () => {
+    const malformedJson = '```json { malformed json data } ```';
+    render(<ChartRenderer rawJson={malformedJson} isStreaming={false} />);
+    expect(screen.getByText(/Invalid Data Format/i)).toBeInTheDocument();
+  });
+});

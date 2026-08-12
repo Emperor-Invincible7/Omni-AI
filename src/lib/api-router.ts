@@ -21,8 +21,6 @@ export interface ChatRequest {
   messages: ChatMessage[];
   temperature?: number;
   max_tokens?: number;
-  /** Optional session id — server loads prior turns from DB. */
-  sessionId?: string;
   /**
    * Optional credential payload forwarded from the browser. The server
    * uses these only when the matching provider is active; otherwise it
@@ -32,6 +30,7 @@ export interface ChatRequest {
     anthropic?: string;
     groq?: string;
     cerebras?: string;
+    gemini?: string;
     customBaseUrl?: string;
     customKey?: string;
     customModel?: string;
@@ -79,8 +78,6 @@ export async function sendChat(req: ChatRequest): Promise<ChatResponse> {
       body: JSON.stringify(req),
     });
 
-    // Try to parse JSON no matter the status — the route always returns
-    // a normalized envelope.
     let body: ChatResponse | null = null;
     try {
       body = (await res.json()) as ChatResponse;

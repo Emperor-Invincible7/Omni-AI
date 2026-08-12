@@ -1,21 +1,17 @@
 /**
  * Provider configuration for multi-model routing.
  *
- * WikiAi supports four provider families:
- *  - Anthropic (default; uses native Anthropic Messages API)
- *  - Groq       (OpenAI-compatible, requires Bearer auth)
- *  - Cerebras   (OpenAI-compatible, requires Bearer auth)
- *  - Custom     (OpenAI-compatible; user-supplied base URL — Ollama, OpenRouter, LM Studio, etc.)
- *
- * The provider record here is the single source of truth for routing.
- * `authStyle` tells the API router how to inject credentials:
- *   - 'anthropic'  →  x-api-key + anthropic-version headers
- *   - 'bearer'     →  Authorization: Bearer <key>
+ * OMNI-AI supports:
+ *  - Anthropic   (Claude — native Anthropic Messages API)
+ *  - Groq        (OpenAI-compatible, requires Bearer auth)
+ *  - Cerebras    (OpenAI-compatible, requires Bearer auth)
+ *  - Ollama      (OpenAI-compatible; user supplies base URL — http://localhost:11434/v1)
+ *  - Gemini      (Google — uses Google Generative Language API)
  */
 
-export type AuthStyle = 'anthropic' | 'bearer';
+export type AuthStyle = 'anthropic' | 'bearer' | 'gemini';
 
-export type ProviderId = 'anthropic' | 'groq' | 'cerebras' | 'custom';
+export type ProviderId = 'anthropic' | 'groq' | 'cerebras' | 'ollama' | 'gemini';
 
 export interface ModelInfo {
   /** Provider-side identifier sent to the API. */
@@ -39,8 +35,8 @@ export interface ProviderConfig {
   requiresUserKey: boolean;
   /** Whether the provider family speaks the OpenAI Chat Completions schema. */
   openAICompatible: boolean;
-  /** Accent color token used in the UI. */
-  accent: 'emerald' | 'cyan' | 'indigo' | 'amber';
+  /** Optional accent color for picker chips. */
+  accent: 'emerald' | 'cyan' | 'indigo' | 'amber' | 'rose';
   /** Available models for this provider. */
   models: ModelInfo[];
   /** Default model id when this provider is selected. */
@@ -53,7 +49,7 @@ export const PROVIDERS: Record<ProviderId, ProviderConfig> = {
   anthropic: {
     id: 'anthropic',
     label: 'Anthropic',
-    tagline: 'Default · Claude Opus 5',
+    tagline: 'Claude family',
     baseUrl: 'https://api.anthropic.com',
     authStyle: 'anthropic',
     requiresUserKey: false,
@@ -126,27 +122,42 @@ export const PROVIDERS: Record<ProviderId, ProviderConfig> = {
     ],
     defaultModel: 'llama3.1-70b',
   },
-  custom: {
-    id: 'custom',
-    label: 'Local / Custom',
-    tagline: 'Ollama · OpenRouter · self-hosted',
-    baseUrl: '', // user-supplied at runtime
+  ollama: {
+    id: 'ollama',
+    label: 'Ollama',
+    tagline: 'Local · self-hosted',
+    baseUrl: 'http://localhost:11434/v1',
     authStyle: 'bearer',
-    requiresUserKey: false, // user can leave blank for Ollama
+    requiresUserKey: false, // Ollama usually runs unauthenticated locally
     openAICompatible: true,
     accent: 'amber',
     models: [
-      {
-        id: 'auto',
-        label: 'Auto-detect',
-        description: 'Use the model set by the server',
-      },
+      { id: 'llama3.2', label: 'Llama 3.2', description: 'Default local model' },
+      { id: 'qwen2.5', label: 'Qwen 2.5', description: 'Strong reasoning' },
+      { id: 'mistral', label: 'Mistral', description: 'Lightweight general' },
+      { id: 'auto', label: 'Auto', description: 'Use whatever is running' },
     ],
-    defaultModel: 'auto',
+    defaultModel: 'llama3.2',
+  },
+  gemini: {
+    id: 'gemini',
+    label: 'Gemini',
+    tagline: 'Google · multimodal',
+    baseUrl: 'https://generativelanguage.googleapis.com',
+    authStyle: 'gemini',
+    requiresUserKey: true,
+    openAICompatible: false,
+    accent: 'rose',
+    keyHelpUrl: 'https://aistudio.google.com/apikey',
+    models: [
+      { id: 'gemini-flash-latest', label: 'Gemini Flash', description: 'Fast · multimodal · stable' },
+      { id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro', description: 'Most capable · reasoning' },
+    ],
+    defaultModel: 'gemini-flash-latest',
   },
 };
 
-export const PROVIDER_ORDER: ProviderId[] = ['anthropic', 'groq', 'cerebras', 'custom'];
+export const PROVIDER_ORDER: ProviderId[] = ['anthropic', 'groq', 'cerebras', 'ollama', 'gemini'];
 
 /** Storage shape persisted to localStorage. */
 export interface StoredCredentials {
@@ -154,6 +165,7 @@ export interface StoredCredentials {
   anthropic?: string;
   groq?: string;
   cerebras?: string;
+  gemini?: string;
   /** Custom endpoint URL + optional key + model override. */
   customBaseUrl?: string;
   customKey?: string;
@@ -163,7 +175,7 @@ export interface StoredCredentials {
   activeModel?: string;
 }
 
-export const STORAGE_KEY = 'wiki-ai:providers:v1';
+export const STORAGE_KEY = 'omni-ai:providers:v1';
 
 /** True when a provider needs the user to have entered a usable credential. */
 export function providerHasCredential(
@@ -178,8 +190,11 @@ export function providerHasCredential(
       return Boolean(creds.groq && creds.groq.trim().length > 0);
     case 'cerebras':
       return Boolean(creds.cerebras && creds.cerebras.trim().length > 0);
-    case 'custom':
-      return Boolean(creds.customBaseUrl && creds.customBaseUrl.trim().length > 0);
+    case 'ollama':
+      // Ollama uses default localhost; user can override base URL but it's optional.
+      return true;
+    case 'gemini':
+      return Boolean(creds.gemini && creds.gemini.trim().length > 0);
   }
 }
 

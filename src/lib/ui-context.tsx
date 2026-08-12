@@ -1,52 +1,32 @@
 'use client';
 
-import { useState, createContext, useContext, useCallback, ReactNode } from 'react';
+import { createContext, useContext, type ReactNode } from 'react';
 
-export type NavId = 'chat' | 'library' | 'agents' | 'settings';
-
-interface UIState {
-  sidebarOpen: boolean;
-  panelOpen: boolean;
-  activeTab: 'context' | 'metrics' | 'sources';
-  activeNav: NavId;
-  toggleSidebar: () => void;
-  togglePanel: () => void;
-  setActiveTab: (tab: 'context' | 'metrics' | 'sources') => void;
-  setActiveNav: (nav: NavId) => void;
+/**
+ * UIContext is preserved as a thin compatibility wrapper for the layout
+ * hierarchy. Most layout state (sidebar open, panel toggles) is now
+ * local to the page component since the app no longer has a complex
+ * nested dock/panel structure.
+ */
+interface UIContextValue {
+  /** No-op placeholder — retained so existing consumers don't break. */
+  noop: () => void;
 }
 
-const UIContext = createContext<UIState | undefined>(undefined);
+const UIContext = createContext<UIContextValue | undefined>(undefined);
 
 export function UIProvider({ children }: { children: ReactNode }) {
-  const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [panelOpen, setPanelOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<'context' | 'metrics' | 'sources'>('context');
-  const [activeNav, setActiveNav] = useState<NavId>('chat');
-
-  // Wrap in useCallback so consumer memoization isn't invalidated every render.
-  const toggleSidebar = useCallback(() => setSidebarOpen((v) => !v), []);
-  const togglePanel = useCallback(() => setPanelOpen((v) => !v), []);
-
   return (
-    <UIContext.Provider
-      value={{
-        sidebarOpen,
-        panelOpen,
-        activeTab,
-        activeNav,
-        toggleSidebar,
-        togglePanel,
-        setActiveTab,
-        setActiveNav,
-      }}
-    >
+    <UIContext.Provider value={{ noop: () => undefined }}>
       {children}
     </UIContext.Provider>
   );
 }
 
-export const useUI = () => {
+export function useUI() {
   const ctx = useContext(UIContext);
   if (!ctx) throw new Error('useUI must be used within UIProvider');
   return ctx;
-};
+}
+
+export type NavId = 'chat' | 'library' | 'agents' | 'settings';

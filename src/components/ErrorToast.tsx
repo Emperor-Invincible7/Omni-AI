@@ -5,10 +5,10 @@ import { AlertTriangle, AlertCircle, Info, X, ArrowRight, Settings as SettingsIc
 import { useProviders } from '@/lib/provider-context';
 import { PROVIDERS } from '@/lib/providers';
 
-const severityMeta: Record<string, { Icon: typeof AlertCircle; accent: string }> = {
-  warn: { Icon: AlertTriangle, accent: 'text-white' },
-  error: { Icon: AlertCircle, accent: 'text-white' },
-  info: { Icon: Info, accent: 'text-white' },
+const severityMeta: Record<string, { Icon: typeof AlertCircle; color: string }> = {
+  warn: { Icon: AlertTriangle, color: 'var(--text)' },
+  error: { Icon: AlertCircle, color: 'var(--accent)' },
+  info: { Icon: Info, color: 'var(--text)' },
 };
 
 const AUTO_DISMISS_MS = 9000;
@@ -24,27 +24,52 @@ export default function ErrorToast() {
 
   if (!error) return null;
   const Icon = severityMeta[error.severity]?.Icon ?? Info;
+  const iconColor = severityMeta[error.severity]?.color ?? 'var(--text)';
 
   return (
-    <div className="fixed bottom-10 left-1/2 -translate-x-1/2 z-[90] w-[min(520px,calc(100vw-2rem))]">
-      <div className="bg-black border border-white overflow-hidden">
+    <div
+      className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[90] w-[min(520px,calc(100vw-2rem))]"
+      role="status"
+      aria-live="polite"
+    >
+      <div
+        className="overflow-hidden border"
+        style={{
+          background: 'var(--bg)',
+          borderColor: 'var(--border-strong)',
+          color: 'var(--text)',
+        }}
+      >
         <div className="px-4 py-3 flex items-start gap-3">
-          <div className="w-7 h-7 border border-white flex items-center justify-center flex-shrink-0">
-            <Icon size={13} className={severityMeta[error.severity]?.accent ?? 'text-white'} />
+          <div
+            className="w-7 h-7 border flex items-center justify-center flex-shrink-0"
+            style={{ borderColor: iconColor, color: iconColor }}
+          >
+            <Icon size={13} />
           </div>
 
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
-              <h4 className="font-mono text-[12px] font-bold tracking-[0.1em] uppercase text-white truncate">
+              <h4 className="font-mono text-[12px] font-bold tracking-[0.1em] uppercase truncate">
                 {error.title}
               </h4>
-              <span className="tag tag-on">{error.severity.toUpperCase()}</span>
+              <span
+                className="px-1.5 py-0.5 font-mono text-[9px] tracking-[0.18em] uppercase border"
+                style={{ borderColor: 'var(--border)', color: 'var(--text-dim)' }}
+              >
+                {error.severity.toUpperCase()}
+              </span>
             </div>
-            <p className="text-[12px] text-[#A3A3A3] mt-1 leading-relaxed">{error.message}</p>
+            <p className="text-[12px] mt-1 leading-relaxed" style={{ color: 'var(--text-dim)' }}>
+              {error.message}
+            </p>
 
             {error.suggestedProviders.length > 0 && (
               <div className="mt-3">
-                <div className="font-mono text-[9px] uppercase tracking-[0.2em] text-[#525252] mb-1.5">
+                <div
+                  className="font-mono text-[9px] uppercase tracking-[0.2em] mb-1.5"
+                  style={{ color: 'var(--text-mute)' }}
+                >
                   TRY_SWITCHING_TO
                 </div>
                 <div className="flex flex-wrap gap-1.5">
@@ -62,8 +87,8 @@ export default function ErrorToast() {
                         title={`Switch to ${p.label}`}
                       >
                         <span>{p.label.toUpperCase()}</span>
-                        <span className="text-[#525252]">·</span>
-                        <span className="text-[#A3A3A3]">{model.label}</span>
+                        <span style={{ color: 'var(--text-mute)' }}>·</span>
+                        <span style={{ color: 'var(--text-dim)' }}>{model.label}</span>
                         <ArrowRight size={10} />
                       </button>
                     );
@@ -73,7 +98,7 @@ export default function ErrorToast() {
                       openSettings();
                       dismissError();
                     }}
-                    className="nx-btn"
+                    className="flex items-center gap-1.5 nx-btn"
                   >
                     <SettingsIcon size={10} />
                     ADD_KEY
@@ -94,8 +119,9 @@ export default function ErrorToast() {
         </div>
 
         <div
-          className="h-[2px] bg-white origin-left"
+          className="h-[2px] origin-left"
           style={{
+            background: 'var(--accent)',
             animation: `nx-toast-bar ${AUTO_DISMISS_MS}ms linear forwards`,
           }}
         />

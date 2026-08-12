@@ -86,7 +86,7 @@ function writeStorage(value: StoredCredentials) {
   try {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(value));
   } catch {
-    // Quota or privacy mode — fail silently rather than crash the UI.
+    /* quota / privacy mode */
   }
 }
 
@@ -117,13 +117,9 @@ export function ProviderContextProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<ProviderError | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
-  // Avoid persisting before hydration (otherwise we'd wipe storage on first paint).
   const persistRef = useRef(false);
-  // Latest credentials — lets callbacks read current state without retriggering
-  // on every credentials change.
   const credentialsRef = useRef<StoredCredentials>({});
 
-  // Hydrate from localStorage exactly once on mount.
   useEffect(() => {
     const stored = readStorage();
     const { provider, model } = defaultActive(stored);
@@ -132,7 +128,6 @@ export function ProviderContextProvider({ children }: { children: ReactNode }) {
     setActiveProvider(provider);
     setActiveModel(model);
     setHydrated(true);
-    // From this point onward, mutations are allowed to persist.
     persistRef.current = true;
   }, []);
 
@@ -160,7 +155,6 @@ export function ProviderContextProvider({ children }: { children: ReactNode }) {
         if (persistRef.current) writeStorage(next);
         return next;
       });
-      // Switching providers clears any error toast — the user took action.
       setError(null);
     },
     [],
@@ -168,7 +162,6 @@ export function ProviderContextProvider({ children }: { children: ReactNode }) {
 
   const reportError = useCallback<ProviderContextValue['reportError']>(
     (partial) => {
-      // Compute suggestions: providers that ARE configured, excluding the failing one.
       const current = credentialsRef.current;
       const suggestions =
         partial.suggestedProviders ??

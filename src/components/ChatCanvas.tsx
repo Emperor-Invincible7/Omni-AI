@@ -2,60 +2,41 @@
 
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { Sparkles, Cpu, FileText, Zap } from 'lucide-react';
-import StatusBar from './StatusBar';
-import DotMatrix from './DotMatrix';
 import OmniLogo from './OmniLogo';
+import DotMatrix from './DotMatrix';
 import MarkdownView from './MarkdownView';
 import { useProviders } from '@/lib/provider-context';
 import { PROVIDERS } from '@/lib/providers';
 import { sendChat, describeError } from '@/lib/api-router';
 import { onPrompt } from '@/lib/prompt-bus';
-import { useSessionStore } from '@/lib/session-context';
+import { useSessionStore, type UiMessage } from '@/lib/session-context';
+import ClientOnly from './ClientOnly';
 import clsx from 'clsx';
 
 const quickActions = [
-  { id: 'qa1', label: 'SUMMARIZE', icon: FileText },
-  { id: 'qa2', label: 'RESEARCH',  icon: Sparkles },
-  { id: 'qa3', label: 'CODE',      icon: Cpu },
-  { id: 'qa4', label: 'BRAINSTORM',icon: Zap },
+  { id: 'qa1', label: 'SUMMARIZE', icon: FileText, prompt: 'Summarize the key takeaways from a recent article I have in mind.' },
+  { id: 'qa2', label: 'RESEARCH',  icon: Sparkles, prompt: 'Research the latest developments in agentic LLM workflows and report concise findings.' },
+  { id: 'qa3', label: 'CODE',      icon: Cpu, prompt: 'Help me write TypeScript. Suggest three idiomatic patterns for a particular problem I will describe.' },
+  { id: 'qa4', label: 'BRAINSTORM',icon: Zap, prompt: 'Brainstorm a creative product name and tagline for an industrial AI workspace.' },
 ];
 
 export default function ChatCanvas() {
-  const [messages, setMessages] = useState<UiMessage[]>([]);
-  const [isStreaming, setIsStreaming] = useState(false);
-  const [tokensUsed, setTokensUsed] = useState(0);
-  const scrollRef = useRef<HTMLDivElement>(null);
-
+  const { messages, activeSessionId, persistTurn } = useSessionStore();
   const { activeProvider, activeModel, credentials, reportError } = useProviders();
   const provider = PROVIDERS[activeProvider];
   const model = provider.models.find((m) => m.id === activeModel) ?? provider.models[0];
 
-  const session = useSessionStore();
-  const { activeSessionId, messages: persistedMessages, persistTurn } = session;
+  const [isStreaming, setIsStreaming] = useState(false);
+  const [tokensUsed, setTokensUsed] = useState(0);
 
-  // Whenever the active session changes, sync the canvas's local view to
-  // the DB-backed messages. This makes "open session" / "new chat" reflect
-  // in the canvas without remounting the whole component.
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const startLatency = useRef<number>(0);
+
+  // Token estimate from canvas messages (mutable local view).
   useEffect(() => {
-    setMessages(
-      persistedMessages.map((m) => ({
-        id: m.id,
-        role: m.role as 'user' | 'assistant' | 'system',
-        content: m.content,
-        timestamp: new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        model: (m.metrics?.model as string) ?? undefined,
-        latencyMs: (m.metrics?.latencyMs as number) ?? undefined,
-        tokens: (m.metrics?.total_tokens as number) ?? undefined,
-      })),
-    );
-  }, [activeSessionId, persistedMessages]);
-
-  // Stable session id for the status bar — keyed by activeSessionId so it
-  // updates as the user switches sessions.
-  const sessionId = useMemo(() => {
-    if (activeSessionId) return activeSessionId.slice(-6).toUpperCase();
-    return Math.random().toString(36).slice(2, 8).toUpperCase();
-  }, [activeSessionId]);
+    const totalChars = messages.reduce((acc, m) => acc + (m.content?.length ?? 0), 0);
+    setTokensUsed(Math.round(totalChars / 4));
+  }, [messages]);
 
   // Auto-scroll on new messages.
   useEffect(() => {
@@ -64,38 +45,34 @@ export default function ChatCanvas() {
     el.scrollTop = el.scrollHeight;
   }, [messages, isStreaming]);
 
-  // Token estimate from canvas messages (mutable local view).
-  useEffect(() => {
-    const totalChars = messages.reduce((acc, m) => acc + (m.content?.length ?? 0), 0);
-    setTokensUsed(Math.round(totalChars / 4));
-  }, [messages]);
-
-  const startLatency = useRef<number>(0);
-
   const onSend = useCallback(
-    async (text: string) => {
+    async (text: string, attachmentSummary?: string, webSearch?: boolean) => {
       const trimmed = text.trim();
       if (!trimmed || isStreaming) return;
 
-      const userMsg: UiMessage = {
-        id: `local-${Date.now()}-u`,
-        role: 'user',
-        content: trimmed,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      };
-      setMessages((prev) => [...prev, userMsg]);
+      // Compose the user message that hits the wire.
+      // If we have a file, the AI sees the data context inline so it can
+      // ground its answer without us needing a file upload endpoint.
+      let composedForAi = trimmed;
+      if (attachmentSummary) {
+        composedForAi = `${trimmed}\n\n${attachmentSummary}`;
+      }
+      if (webSearch) {
+        composedForAi = `${composedForAi}\n\n[WEB_SEARCH_ENABLED · GROUND_ANSWER_IN_LIVE_RESULTS]`;
+      }
+
       setIsStreaming(true);
       startLatency.current = Date.now();
 
       const res = await sendChat({
         provider: activeProvider,
         model: activeModel,
-        messages: [{ role: 'user', content: trimmed }],
-        sessionId: activeSessionId ?? undefined,
+        messages: [{ role: 'user', content: composedForAi }],
         credentials: {
           anthropic: credentials.anthropic,
           groq: credentials.groq,
           cerebras: credentials.cerebras,
+          gemini: credentials.gemini,
           customBaseUrl: credentials.customBaseUrl,
           customKey: credentials.customKey,
           customModel: credentials.customModel,
@@ -113,24 +90,11 @@ export default function ChatCanvas() {
           message: friendly.body,
           failedProvider: activeProvider,
         });
-        // remove the optimistic user message on failure so the UI is clean
-        setMessages((prev) => prev.filter((m) => m.id !== userMsg.id));
         return;
       }
 
-      const assistantMsg: UiMessage = {
-        id: `local-${Date.now()}-a`,
-        role: 'assistant',
-        content: res.data.content,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        model: model.label,
-        latencyMs,
-        tokens: res.data.usage?.total_tokens,
-      };
-      setMessages((prev) => [...prev, assistantMsg]);
-
-      // Auto-save to DB.
-      void persistTurn({
+      // Persist the turn via session-context (in-memory).
+      persistTurn({
         userContent: trimmed,
         assistantContent: res.data.content,
         metrics: {
@@ -148,6 +112,7 @@ export default function ChatCanvas() {
       credentials.anthropic,
       credentials.groq,
       credentials.cerebras,
+      credentials.gemini,
       credentials.customBaseUrl,
       credentials.customKey,
       credentials.customModel,
@@ -155,156 +120,220 @@ export default function ChatCanvas() {
       model.label,
       reportError,
       persistTurn,
-      activeSessionId,
     ],
   );
 
   // Subscribe to prompts from the InputBar.
-  useEffect(() => onPrompt((e) => void onSend(e.text)), [onSend]);
+  useEffect(() => onPrompt((e) => void onSend(e.text, e.attachment?.summary, e.webSearch)), [onSend]);
 
   const onQuickAction = useCallback(
-    (label: string) => void onSend(`Help me ${label.toLowerCase()}.`),
+    (label: string, prompt: string) => void onSend(prompt),
     [onSend],
   );
 
   return (
-    <div className="flex flex-col h-full bg-black" data-testid="chat-canvas">
-      <StatusBar
-        tokensUsed={tokensUsed}
-        tokensMax={200_000}
-        modelLabel={model.label}
-        providerLabel={provider.label}
-        isStreaming={isStreaming}
-        sessionId={sessionId}
-      />
-
-      <div ref={scrollRef} className="flex-1 overflow-y-auto">
-        <div className="max-w-3xl mx-auto px-4 py-10">
-          {/* Welcome block */}
-          <div className="border border-white/20 p-6 mb-6">
-            <div className="flex items-center gap-3 mb-4">
-              <OmniLogo size={28} className="text-white" />
-              <div className="font-mono text-[10px] tracking-[0.2em] uppercase text-[#A3A3A3]">
-                OMNI-AI · RUNTIME :: v0.2
-              </div>
+    <div className="flex flex-col h-full min-h-0" data-testid="chat-canvas">
+      {/* Scrollable message stream — centered, max 800px */}
+      <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto">
+        <div className="max-w-[800px] mx-auto px-4 py-10">
+          {messages.length === 0 && !isStreaming ? (
+            <WelcomeScreen onQuick={(label) => {
+              const qa = quickActions.find((q) => q.label === label);
+              if (qa) onQuickAction(label, qa.prompt);
+            }} />
+          ) : (
+            <div className="space-y-6">
+              {messages.map((m, idx) => (
+                <MessageCell key={m.id} msg={m} index={idx} />
+              ))}
+              {isStreaming && <StreamingIndicator />}
             </div>
-            <h1 className="text-[28px] font-bold tracking-tight leading-tight text-white">
-              How can I help you think today?
-            </h1>
-            <p className="text-[#A3A3A3] text-[13px] mt-2 max-w-md leading-relaxed">
-              Attach documents, search knowledge, or run a model. Sessions persist to the local database.
-            </p>
-
-            <div className="flex flex-wrap gap-2 mt-5">
-              {quickActions.map((a) => {
-                const Icon = a.icon;
-                return (
-                  <button
-                    key={a.id}
-                    onClick={() => onQuickAction(a.label)}
-                    className="flex items-center gap-2 h-8 px-3 border border-white/20 hover:border-white font-mono text-[10px] tracking-[0.14em] uppercase text-[#A3A3A3] hover:text-white transition-colors"
-                  >
-                    <Icon size={12} />
-                    {a.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Messages */}
-          <div className="space-y-4">
-            {messages.length === 0 && !isStreaming && (
-              <div className="border border-white/20 p-6 font-mono text-[11px] tracking-[0.14em] uppercase text-[#525252]">
-                EMPTY_SESSION · TYPE_PROMPT_TO_BEGIN
-              </div>
-            )}
-            {messages.map((msg, idx) => (
-              <MessageCell key={msg.id} msg={msg} index={idx} />
-            ))}
-
-            {isStreaming && (
-              <div className="flex gap-3 items-start border border-white/20 p-4">
-                <OmniLogo size={16} className="text-white mt-1 flex-shrink-0" />
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="font-mono text-[10px] tracking-[0.2em] uppercase text-white">
-                      OMNI-AI
-                    </span>
-                    <span className="font-mono text-[9px] tracking-[0.2em] uppercase text-[#737373]">
-                      · STREAMING
-                    </span>
-                  </div>
-                  <DotMatrix
-                    pattern={[1, 0, 0, 1, 0, 1, 'blink', 0, 1, 0, 0, 1, 0, 1, 0, 1]}
-                  />
-                </div>
-              </div>
-            )}
-          </div>
+          )}
         </div>
       </div>
     </div>
   );
 }
 
-interface UiMessage {
-  id: string;
-  role: 'user' | 'assistant' | 'system';
-  content: string;
-  timestamp: string;
-  model?: string;
-  latencyMs?: number;
-  tokens?: number;
+/* ---------- Welcome / Empty state ---------- */
+
+function WelcomeScreen({ onQuick }: { onQuick: (label: string) => void }) {
+  return (
+    <div className="space-y-10">
+      <div className="flex flex-col items-center text-center pt-8">
+        <ClientOnly
+          fallback={
+            <div className="w-16 h-16 flex items-center justify-center">
+              <OmniLogo size={48} className="text-white" />
+            </div>
+          }
+        >
+          <AnimatedLogo />
+        </ClientOnly>
+
+        <h1 className="text-[44px] font-bold tracking-[-0.02em] leading-none mt-6">
+          OMNI-AI
+        </h1>
+        <p
+          className="font-mono text-[11px] tracking-[0.2em] uppercase mt-3"
+          style={{ color: 'var(--text-mute)' }}
+        >
+          v1.0 · RUNTIME :: ONLINE
+        </p>
+        <p
+          className="text-[14px] leading-relaxed mt-5 max-w-md"
+          style={{ color: 'var(--text-dim)' }}
+        >
+          An industrial monochrome AI workspace. Crisp answers. Sharp charts. Stateless sessions.
+        </p>
+      </div>
+
+      <div>
+        <div
+          className="flex items-center justify-between mb-3 font-mono text-[10px] tracking-[0.18em] uppercase"
+          style={{ color: 'var(--text-mute)' }}
+        >
+          <span>QUICK_PROMPTS</span>
+          <span>{quickActions.length} AVAILABLE</span>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          {quickActions.map((q) => {
+            const Icon = q.icon;
+            return (
+              <button
+                key={q.id}
+                onClick={() => onQuick(q.label)}
+                className="flex items-start gap-3 p-4 border text-left transition-colors"
+                style={{
+                  borderColor: 'var(--border)',
+                  background: 'var(--bg-elev-1)',
+                  color: 'var(--text-dim)',
+                }}
+                onMouseEnter={(e) => {
+                  (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--border-strong)';
+                  (e.currentTarget as HTMLButtonElement).style.color = 'var(--text)';
+                  (e.currentTarget as HTMLButtonElement).style.background = 'var(--bg-elev-2)';
+                }}
+                onMouseLeave={(e) => {
+                  (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--border)';
+                  (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-dim)';
+                  (e.currentTarget as HTMLButtonElement).style.background = 'var(--bg-elev-1)';
+                }}
+              >
+                <Icon size={14} className="mt-0.5 flex-shrink-0" style={{ color: 'var(--accent)' }} />
+                <div>
+                  <div className="font-mono text-[11px] tracking-[0.18em] uppercase">{q.label}</div>
+                  <div className="text-[12px] mt-1 leading-relaxed" style={{ color: 'var(--text-mute)' }}>
+                    {q.prompt}
+                  </div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
 }
+
+function AnimatedLogo() {
+  return (
+    <div className="relative w-16 h-16 flex items-center justify-center">
+      <OmniLogo size={48} className="text-[var(--text)]" />
+      <div className="absolute inset-0 flex items-center justify-center">
+        <DotMatrix pattern={[1, 1, 1, 0, 1, 'blink', 0, 0, 0, 1, 0, 1, 1, 0, 1, 1]} size={3} />
+      </div>
+    </div>
+  );
+}
+
+/* ---------- Message rendering ---------- */
 
 function MessageCell({ msg, index }: { msg: UiMessage; index: number }) {
   const isUser = msg.role === 'user';
+  const time = useMemo(() => {
+    const d = new Date(msg.timestamp);
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }, [msg.timestamp]);
+
   return (
-    <div
-      className={clsx(
-        'border p-4 flex gap-3 items-start',
-        isUser ? 'border-white/20' : 'border-white/20',
-      )}
+    <article
+      className={clsx('flex gap-3 items-start border p-4')}
+      style={{ borderColor: 'var(--border-soft)' }}
     >
       {isUser ? (
-        <div className="font-mono text-[10px] tracking-[0.2em] uppercase text-[#737373] mt-0.5 flex-shrink-0">
-          YOU · {String(index + 1).padStart(2, '0')}
+        <div
+          className="font-mono text-[10px] tracking-[0.2em] uppercase mt-0.5 flex-shrink-0"
+          style={{ color: 'var(--text-mute)' }}
+        >
+          YOU · {String(Math.floor(index / 2) + 1).padStart(2, '0')}
         </div>
       ) : (
-        <OmniLogo size={16} className="text-white mt-1 flex-shrink-0" />
+        <OmniLogo size={16} className="text-[var(--text)] mt-1 flex-shrink-0" />
       )}
 
       <div className="flex-1 min-w-0">
-        {!isUser && (
-          <div className="flex items-center gap-2 mb-2 font-mono text-[10px] tracking-[0.2em] uppercase">
-            <span className="text-white">OMNI-AI</span>
-            <span className="text-[#525252]">·</span>
-            <span className="text-[#A3A3A3]">{msg.model ?? '—'}</span>
-            {msg.latencyMs != null && (
-              <>
-                <span className="text-[#525252]">·</span>
-                <span className="text-[#A3A3A3] tabular-nums">{msg.latencyMs}ms</span>
-              </>
-            )}
-            {msg.tokens != null && (
-              <>
-                <span className="text-[#525252]">·</span>
-                <span className="text-[#A3A3A3] tabular-nums">{msg.tokens} TOK</span>
-              </>
-            )}
-          </div>
-        )}
+        <div
+          className="flex items-center gap-2 mb-2 font-mono text-[10px] tracking-[0.2em] uppercase"
+          style={{ color: 'var(--text-mute)' }}
+        >
+          <span style={{ color: 'var(--text)' }}>{isUser ? 'YOU' : 'OMNI-AI'}</span>
+          {!isUser && msg.model && (
+            <>
+              <span>·</span>
+              <span style={{ color: 'var(--text-dim)' }}>{msg.model}</span>
+            </>
+          )}
+          {!isUser && msg.latencyMs != null && (
+            <>
+              <span>·</span>
+              <span className="tabular-nums" style={{ color: 'var(--text-dim)' }}>
+                {msg.latencyMs}ms
+              </span>
+            </>
+          )}
+          {!isUser && msg.tokens != null && (
+            <>
+              <span>·</span>
+              <span className="tabular-nums" style={{ color: 'var(--text-dim)' }}>
+                {msg.tokens} TOK
+              </span>
+            </>
+          )}
+        </div>
 
         {isUser ? (
-          <div className="text-[14px] leading-relaxed whitespace-pre-wrap text-white">{msg.content}</div>
+          <div className="text-[14px] leading-relaxed whitespace-pre-wrap" style={{ color: 'var(--text)' }}>
+            {msg.content}
+          </div>
         ) : (
           <MarkdownView content={msg.content} />
         )}
 
-        <div className="flex items-center gap-2 mt-3 font-mono text-[9px] tracking-[0.2em] uppercase text-[#525252]">
-          <span>{msg.timestamp}</span>
+        <div
+          className="flex items-center gap-2 mt-3 font-mono text-[9px] tracking-[0.2em] uppercase"
+          style={{ color: 'var(--text-mute)' }}
+        >
+          <ClientOnly fallback={<span>··:··</span>}>
+            <span>{time}</span>
+          </ClientOnly>
         </div>
+      </div>
+    </article>
+  );
+}
+
+function StreamingIndicator() {
+  return (
+    <div className="flex gap-3 items-start border p-4" style={{ borderColor: 'var(--border-soft)' }}>
+      <OmniLogo size={16} className="mt-1 flex-shrink-0" />
+      <div className="flex-1">
+        <div className="flex items-center gap-2 mb-2 font-mono text-[10px] tracking-[0.2em] uppercase" style={{ color: 'var(--text)' }}>
+          <span>OMNI-AI</span>
+          <span style={{ color: 'var(--text-mute)' }}>·</span>
+          <span style={{ color: 'var(--accent)' }}>STREAMING</span>
+        </div>
+        <DotMatrix pattern={[1, 0, 0, 1, 0, 1, 'blink', 0, 1, 0, 0, 1, 0, 1, 0, 1]} />
       </div>
     </div>
   );
