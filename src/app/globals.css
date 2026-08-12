@@ -1,0 +1,237 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================================
+   OMNI-AI · NOTHING OS DESIGN SYSTEM
+   - Strict monochrome: pure black, pure white, monospaced accents
+   - 0px radii. 1px sharp borders. Grid-based layout.
+   - No gradients, no soft shadows, no glassmorphism.
+   ============================================================ */
+
+:root {
+  --bg: #000000;
+  --bg-elev-1: #0A0A0A;
+  --bg-elev-2: #141414;
+  --border: #2A2A2A;
+  --border-strong: #FFFFFF;
+  --border-faint: #1F1F1F;
+  --text: #FFFFFF;
+  --text-dim: #A3A3A3;
+  --text-mute: #525252;
+  --accent-on: #FFFFFF;
+  --accent-off: #525252;
+  --signal: #FFFFFF;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Inter', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  letter-spacing: -0.005em;
+  overflow: hidden;
+}
+
+body {
+  /* Flat monochrome — no radial gradients, no aurora. */
+  background: #000000;
+}
+
+/* Reusable dot-matrix typography helpers. */
+.font-mono-tight { font-family: 'JetBrains Mono', ui-monospace, monospace; letter-spacing: 0; }
+.font-mono-caps  { font-family: 'JetBrains Mono', ui-monospace, monospace; letter-spacing: 0.08em; text-transform: uppercase; }
+
+/* Custom scrollbar — square, monospace friendly. */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: #000000; border-left: 1px solid #1F1F1F; }
+::-webkit-scrollbar-thumb { background: #2A2A2A; border-radius: 0; }
+::-webkit-scrollbar-thumb:hover { background: #FFFFFF; }
+
+@layer components {
+  /* Sharp cell border. Use border-cell on any grid compartment. */
+  .cell {
+    border: 1px solid var(--border);
+    background: var(--bg-elev-1);
+  }
+  .cell-hover {
+    transition: background-color 120ms linear, border-color 120ms linear;
+  }
+  .cell-hover:hover {
+    background: var(--bg-elev-2);
+    border-color: var(--border-strong);
+  }
+
+  /* Small, dense button used everywhere. */
+  .nx-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    height: 28px;
+    padding: 0 10px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text);
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    border-radius: 0;
+    transition: border-color 100ms linear, background-color 100ms linear;
+  }
+  .nx-btn:hover {
+    border-color: var(--border-strong);
+    background: var(--bg-elev-2);
+  }
+  .nx-btn:disabled {
+    color: var(--text-mute);
+    border-color: var(--border-faint);
+    cursor: not-allowed;
+  }
+
+  .nx-icon-btn {
+    width: 28px;
+    height: 28px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--text-dim);
+    border-radius: 0;
+    transition: color 100ms linear, border-color 100ms linear, background-color 100ms linear;
+  }
+  .nx-icon-btn:hover {
+    color: var(--text);
+    border-color: var(--border-strong);
+  }
+  .nx-icon-btn:disabled {
+    color: var(--text-mute);
+    cursor: not-allowed;
+  }
+
+  /* Dot-matrix visual primitives. */
+  .dot { display: inline-block; width: 6px; height: 6px; background: currentColor; border-radius: 0; }
+  .dot-active { background: #FFFFFF; }
+  .dot-idle { background: #525252; }
+
+  /* 4x4 pixel grid used in loading and active states. */
+  .dot-matrix {
+    display: grid;
+    grid-template-columns: repeat(4, 4px);
+    grid-template-rows: repeat(4, 4px);
+    gap: 2px;
+  }
+  .dot-matrix > span {
+    background: #2A2A2A;
+    width: 4px; height: 4px;
+  }
+  .dot-matrix > span.on { background: #FFFFFF; }
+  .dot-matrix > span.blink { animation: matrixBlink 1.2s steps(2,end) infinite; }
+
+  /* Status bar separator — 1px tall, no glow. */
+  .rule { height: 1px; background: var(--border); }
+  .rule-strong { height: 1px; background: var(--border-strong); }
+
+  /* Mono tag used for all status/metric badges. */
+  .tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 6px;
+    border: 1px solid var(--border);
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    border-radius: 0;
+  }
+  .tag-on { color: var(--text); border-color: var(--border-strong); }
+
+  /* Input shell — 1px, no rounding, no shadow. */
+  .input-shell {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 44px;
+    padding: 0 12px;
+    border: 1px solid var(--border-strong);
+    background: #000000;
+    border-radius: 0;
+    transition: border-color 100ms linear;
+  }
+  .input-shell:focus-within { border-color: var(--border-strong); }
+
+  .input-shell input,
+  .input-shell textarea {
+    flex: 1;
+    background: transparent;
+    border: 0;
+    outline: 0;
+    color: var(--text);
+    font-family: 'Inter', system-ui, sans-serif;
+    font-size: 14px;
+    line-height: 1.4;
+    resize: none;
+  }
+  .input-shell input::placeholder,
+  .input-shell textarea::placeholder { color: var(--text-mute); }
+
+  /* Dock button used for bottom navigation. */
+  .dock-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 32px;
+    padding: 0 12px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--text-dim);
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    transition: color 100ms linear, border-color 100ms linear, background-color 100ms linear;
+  }
+  .dock-btn:hover { color: var(--text); border-color: var(--border-strong); }
+  .dock-btn.active { color: var(--text); border-color: var(--border-strong); background: #0A0A0A; }
+}
+
+/* ---------- OMNI markdown / table styling ---------- */
+@layer components {
+  .omni-md p { margin: 0; }
+  .omni-md code {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 12.5px;
+    background: #000;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    padding: 1px 6px;
+    color: #fff;
+  }
+  .omni-md pre code {
+    border: 0;
+    padding: 0;
+    background: transparent;
+    color: #EDEDED;
+  }
+  .omni-table {
+    border-collapse: collapse;
+    width: 100%;
+  }
+  .omni-table th,
+  .omni-table td {
+    border: 1px solid rgba(255, 255, 255, 0.2);
+  }
+  .omni-table thead th {
+    background: #0A0A0A;
+    color: #A3A3A3;
+  }
+  .omni-table tbody tr:hover {
+    background: #0A0A0A;
+  }
+}
